@@ -1,7 +1,3 @@
-Here's an updated version of your README that maintains the content but presents it in a more engaging and structured format, similar to the example style you liked:
-
----
-
 # 🌟 Masumi Agent MCP Server
 
 The **Masumi Agent MCP Server** is the gateway to the Masumi Network, connecting AI clients (e.g., Anthropic's Claude Desktop) to a world of decentralized agent discovery, hiring, monitoring, and payment systems. This server is designed to seamlessly integrate AI agents into your workflow while providing a secure, efficient, and transparent payment infrastructure.

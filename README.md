@@ -57,13 +57,11 @@ The server is organized into multiple files for better maintainability:
 
 There are two main ways to run the server:
 
-### 1. Development Mode (for Testing & Debugging)
-
-This mode is ideal for developing the server or testing its functionality locally using the MCP Inspector.
+### 1. Install the MCP Server
 
 1.  **Clone the Repository (if you haven't already):**
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/masumi-network/masumi-mcp-server.git
     cd masumi-mcp-final
     ```
 2.  **Initialize Project & Install Dependencies:**
@@ -72,26 +70,15 @@ This mode is ideal for developing the server or testing its functionality locall
     uv add "mcp[cli]" httpx python-dotenv
     ```
 3.  **Configure Environment Variables:**
-    *   Create a file named `.env` in the project's root directory (`masumi-mcp-final`).
+    *   Copy .env.example into a new file named `.env` in the project's root directory (`masumi-mcp-final`) using cp .env.example .env
     *   Add the necessary environment variables as described in the **Configuration** section below, including your Masumi tokens.
     *   **IMPORTANT:** Keep your `.env` file secure, especially your `MASUMI_PAYMENT_TOKEN`. Do not commit it to public repositories. Add `.env` to your `.gitignore` file.
-
-4.  **Run the Development Server:**
-    ```bash
-    uv run mcp dev server.py
-    ```
-    This command starts:
-    *   Your `server.py` MCP server process.
-    *   The MCP Inspector web interface.
-    *   You should see output indicating the Inspector is running, usually at `http://localhost:8787`. Open this URL in your browser to interact with the server directly.
-
-    `[Screenshot: MCP Inspector showing Masumi tools: list_agents, get_agent_input_schema, hire_agent, check_job_status]`
 
 ### 2. Installation for Claude Desktop (or other clients)
 
 This method registers the server with your MCP client application so it can be launched automatically when needed.
 
-1.  **Ensure Prerequisites:** Complete steps 1-3 from the Development Mode setup above (clone, install dependencies, configure `.env`).
+1.  **Ensure Prerequisites:** Complete steps 1-3 from the MCP Server setup above (clone, install dependencies, configure `.env`).
 2.  **Run the Install Command:** Make sure you are in the project's root directory (`masumi-mcp-final`).
     ```bash
     uv run mcp install server.py --name "Masumi Agent Manager" -f .env
@@ -103,7 +90,7 @@ This method registers the server with your MCP client application so it can be l
     *   The "Masumi Agent Manager" server should now appear in the client's list of available tools or servers.
     *   The client will automatically launch the server process in the background the first time you try to use one of its tools.
 
-    `[Screenshot: Claude Desktop settings/tools panel showing "Masumi Agent Manager"]`
+   <img width="1495" alt="Screenshot 2025-04-18 at 03 28 37" src="https://github.com/user-attachments/assets/4c8d7641-e40c-454f-9b55-76fa78bc2f4b" />
 
 ## Configuration (`.env` file explained)
 
@@ -132,6 +119,8 @@ The server follows a specific workflow to ensure safe and correct agent hiring:
 4. **Hire Agent**: Use the `hire_agent` tool with your provided input values to start the job
 5. **Check Job Status**: Use `check_job_status` to monitor the job's progress
 6. **View Full Results**: For large outputs, `check_job_status` will provide a preview and instructions to use `get_job_full_result` to view the complete, untruncated result
+
+<img width="1495" alt="Screenshot 2025-04-18 at 03 29 58" src="https://github.com/user-attachments/assets/08c1f53e-ad6c-48d2-82a6-60ee56ea6ea5" />
 
 ## Handling Large Results
 

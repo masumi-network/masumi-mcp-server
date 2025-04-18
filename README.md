@@ -1,30 +1,30 @@
 # Masumi Agent MCP Server
 
-This project provides a Model Context Protocol (MCP) server that acts as a bridge to the Masumi Network. It allows MCP-compatible clients (like Anthropic's Claude Desktop) to discover, inspect, hire, and monitor AI agents available on the Masumi Network.
+The Masumi Agent MCP Server connects clients (e.g., Anthropic's Claude Desktop) to the Masumi Network, enabling AI agent discovery, hiring, monitoring, and payment.
 
-## Why Masumi? Bridging the Gaps in AI Agent Collaboration
+## Why Masumi?
 
-As AI agents become more specialized and capable, interacting with them presents several fundamental challenges, particularly when trying to build complex workflows involving multiple agents or when accessing specialized, commercial agents. Masumi aims to provide the foundational infrastructure to address these issues:
+### Bridging AI Agent Collaboration Challenges
+Masumi addresses key issues in AI agent workflows, including payment infrastructure, agent verification, and decision logging.
 
-1.  **Payment Infrastructure:**
-    *   **Problem:** How can AI agents effectively monetize their services or engage in financial transactions with users or other agents in a secure and standardized way? Relying on traditional payment gateways for every micro-transaction or agent-to-agent interaction is inefficient and complex.
-    *   **Masumi's Solution:** Masumi integrates a dedicated payment system (utilizing blockchain technology like Cardano for security and transparency) allowing agents to define pricing and enabling users or other agents to pay for services directly through the network protocol. This MCP server facilitates initiating these payment flows.
+### Payment Infrastructure
+- **Problem:** Traditional payment systems are inefficient for agent-to-agent transactions.
+- **Solution:** Masumi uses blockchain (Cardano) for secure, transparent payments, enabling direct transactions between agents and users.
 
-2.  **Verified Identities:**
-    *   **Problem:** In an open network, how can you trust that an agent is who it claims to be? Verifying the authenticity of an agent is crucial for security and reliable interactions.
-    *   **Masumi's Solution:** The Masumi network incorporates mechanisms for verifying agent identities (details may involve registry checks, cryptographic signatures, etc.). This helps ensure that users and agents are interacting with legitimate, registered entities.
+### Verified Identities
+- **Problem:** Trusting an agent's identity in an open network.
+- **Solution:** Masumi uses identity verification (e.g., cryptographic signatures) for secure interactions.
 
-3.  **On-Chain Decision Logging:**
-    *   **Problem:** When critical agreements are made (like payment commitments for job results), how can all parties trust the record of that agreement? Off-chain logs can be disputed or altered.
-    *   **Masumi's Solution:** Masumi leverages blockchain technology to optionally log key decisions, agreements, or transaction states immutably. This creates a transparent and auditable trail, increasing trust in interactions that have financial or critical consequences.
+### On-Chain Decision Logging
+- **Problem:** Off-chain logs can be altered, creating trust issues.
+- **Solution:** Masumi logs key agreements and transactions on-chain for immutable, auditable records.
 
-4.  **Agent Discovery:**
-    *   **Problem:** With a growing number of specialized agents, how can users or other agents efficiently find the specific capabilities they need? A simple directory isn't sufficient for complex requirements.
-    *   **Masumi's Solution:** Masumi provides a dedicated Agent Registry. This allows agents to publish their capabilities, descriptions, pricing, and other metadata, making them discoverable via API calls. This MCP server uses the registry (`list_agents` tool) to enable discovery within the MCP client.
+### Agent Discovery
+- **Problem:** Finding specialized agents is difficult with a simple directory.
+- **Solution:** Masumi's Agent Registry enables efficient discovery via API calls, listing agent capabilities, pricing, and metadata.
 
-**How this MCP Server Fits In:**
-
-This MCP server acts as a user-friendly **gateway** to the Masumi network. It translates the high-level goals expressed in an MCP client (like Claude Desktop) – "find an agent," "hire this agent," "check the job" – into the specific API calls required by the Masumi Registry, the individual Agent APIs, and the Masumi Payment Service. By leveraging the MCP standard, it makes the discovery, payment, and interaction features of Masumi accessible within a conversational AI workflow.
+## How the MCP Server Works
+The MCP Server acts as a gateway, converting client requests (e.g., "find an agent," "hire an agent") into specific API calls to the Masumi Registry and Payment Service, making interactions within the Masumi network accessible in a conversational AI workflow.
 
 ## Features
 

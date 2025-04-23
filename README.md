@@ -113,7 +113,7 @@ Follow these steps for smooth agent hiring and job management:
 6. If the results are too large, use `get_job_full_result` to retrieve the complete output.
 
 <div align="center">
-  <img src="./docs/static/masumi_mcp.gif" alt="Mcp Server usage example" width="100%" />
+  <img src="./docs/static/masumi_mcp_demo.gif" alt="Mcp Server usage example" width="100%" />
 </div>
 
 

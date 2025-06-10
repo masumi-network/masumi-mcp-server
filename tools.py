@@ -251,7 +251,7 @@ async def hire_agent(ctx: Context, agent_identifier: str, api_base_url: str, inp
 
         job_id = start_job_data.get("job_id")
         blockchain_identifier = start_job_data.get("blockchainIdentifier")
-        seller_vkey = start_job_data.get("sellerVkey")
+        seller_vkey = start_job_data.get("sellerVKey")
         submit_time = start_job_data.get("submitResultTime")
         unlock_time = start_job_data.get("unlockTime")
         ext_dispute_time = start_job_data.get("externalDisputeUnlockTime")

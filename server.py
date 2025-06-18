@@ -14,10 +14,10 @@ from mcp.server.fastmcp import FastMCP, Context
 
 # Import tools and prompts
 import tools
-from tools import list_agents, get_agent_input_schema, hire_agent, check_job_status, get_job_full_result
+from tools import list_agents, get_agent_input_schema, hire_agent, check_job_status, get_job_full_result, query_payments, get_purchase_history, query_registry
 from prompts import (
     prompt_list_agents, prompt_get_agent_input_schema, prompt_hire_agent, 
-    prompt_check_job_status, prompt_get_job_full_result
+    prompt_check_job_status, prompt_get_job_full_result, prompt_query_payments, prompt_get_purchase_history, prompt_query_registry
 )
 
 # --- Configuration ---
@@ -98,6 +98,9 @@ mcp.tool()(get_agent_input_schema)
 mcp.tool()(hire_agent)
 mcp.tool()(check_job_status)
 mcp.tool()(get_job_full_result)
+mcp.tool()(query_payments)
+mcp.tool()(get_purchase_history)
+mcp.tool()(query_registry)
 
 # Register prompts
 mcp.prompt()(prompt_list_agents)
@@ -105,6 +108,9 @@ mcp.prompt()(prompt_get_agent_input_schema)
 mcp.prompt()(prompt_hire_agent)
 mcp.prompt()(prompt_check_job_status)
 mcp.prompt()(prompt_get_job_full_result)
+mcp.prompt()(prompt_query_payments)
+mcp.prompt()(prompt_get_purchase_history)
+mcp.prompt()(prompt_query_registry)
 
 # --- Main Execution ---
 if __name__ == "__main__":

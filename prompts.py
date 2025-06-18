@@ -93,4 +93,59 @@ def prompt_get_job_full_result(job_id: Optional[str] = None) -> str:
             f"Example: `get_job_full_result(agent_identifier='ID', api_base_url='URL', job_id='{job_id}')`"
         )
     else:
-        return general_guidance 
+        return general_guidance
+
+def prompt_query_payments() -> str:
+    """Provides guidance on how to query payment requests from the Masumi Payment Service."""
+    return (
+        "To query payment requests, use the `query_payments` tool. This allows you to view payment history "
+        "and transaction details from the Masumi Payment Service.\n\n"
+        "Required parameters:\n"
+        "- `network`: Must be 'Preprod' for testing (Mainnet blocked in testing mode)\n\n"
+        "Optional parameters:\n"
+        "- `limit`: Number of results (1-100, default 10)\n"
+        "- `cursor_id`: For pagination to get next page of results\n"
+        "- `smart_contract_address`: Filter by specific contract address\n"
+        "- `include_history`: Include full transaction history (default False)\n\n"
+        "Example: `query_payments(network='Preprod', limit=5, include_history=True)`\n\n"
+        "⚠️ TESTNET SAFETY: Only 'Preprod' network is allowed during testing to prevent mainnet operations."
+    )
+
+def prompt_get_purchase_history() -> str:
+    """Provides guidance on how to retrieve purchase history from the Masumi Payment Service."""
+    return (
+        "To retrieve your purchase history, use the `get_purchase_history` tool. This allows you to view "
+        "all your past purchases and their current status.\n\n"
+        "Required parameters:\n"
+        "- `network`: Must be 'Preprod' for testing (Mainnet blocked in testing mode)\n\n"
+        "Optional parameters:\n"
+        "- `limit`: Number of results (1-100, default 10)\n"
+        "- `cursor_id`: For pagination to get next page of results\n"
+        "- `smart_contract_address`: Filter by specific contract address\n"
+        "- `include_history`: Include full transaction history (default False)\n\n"
+        "Example: `get_purchase_history(network='Preprod', limit=20, include_history=True)`\n\n"
+        "The response includes:\n"
+        "- Purchase details (ID, agent, amount, status)\n"
+        "- Transaction information\n"
+        "- Purchase summary for quick overview\n\n"
+        "⚠️ TESTNET SAFETY: Only 'Preprod' network is allowed during testing to prevent mainnet operations."
+    )
+
+def prompt_query_registry() -> str:
+    """Provides guidance on how to query the Masumi Registry Service."""
+    return (
+        "To query the agent registry, use the `query_registry` tool. This allows you to browse "
+        "all registered agents on the Masumi network with their details and pricing.\n\n"
+        "Required parameters:\n"
+        "- `network`: Must be 'Preprod' for testing (Mainnet blocked in testing mode)\n\n"
+        "Optional parameters:\n"
+        "- `cursor_id`: For pagination to get next page of results\n"
+        "- `smart_contract_address`: Filter by specific contract address\n\n"
+        "Example: `query_registry(network='Preprod', cursor_id='some-cursor-id')`\n\n"
+        "The response includes:\n"
+        "- Complete agent registry entries with metadata\n"
+        "- Agent capabilities and pricing information\n"
+        "- API endpoints and contact details\n"
+        "- Agent summary for quick overview\n\n"
+        "⚠️ TESTNET SAFETY: Only 'Preprod' network is allowed during testing to prevent mainnet operations."
+    )

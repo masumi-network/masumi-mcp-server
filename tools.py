@@ -7,6 +7,7 @@ import sys
 from typing import Any, List, Tuple
 
 from mcp.server.fastmcp import Context
+from test_data import validate_testnet_safety, validate_test_data_only
 
 # Import URLs from the main module
 MASUMI_REGISTRY_URL = None
@@ -506,3 +507,323 @@ async def check_job_status(ctx: Context, agent_identifier: str, api_base_url: st
 
     except Exception as e:
         return f"Error: Unexpected error checking status for job {job_id}: {str(e)}" 
+
+async def query_payments(ctx: Context, network: str, limit: int = 10, cursor_id: str | None = None, 
+                        smart_contract_address: str | None = None, include_history: bool = False) -> str:
+    """
+    Query payment requests from the Masumi Payment Service.
+    
+    Args:
+        network: The Cardano network ("Preprod" or "Mainnet"). For testing, only "Preprod" is allowed.
+        limit: Number of results to return (1-100, default 10).
+        cursor_id: Optional pagination cursor for retrieving next page of results.
+        smart_contract_address: Optional smart contract address filter (max 250 chars).
+        include_history: Whether to include transaction history (default False).
+        
+    Returns:
+        JSON string containing payment request data with transaction details.
+    """
+    m_ctx = ctx.request_context.lifespan_context
+    client = m_ctx.http_client
+    
+    # Testnet safety validation
+    try:
+        validate_testnet_safety(network)
+    except ValueError as e:
+        ctx.error(f"Testnet safety check failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    # Parameter validation
+    if not (1 <= limit <= 100):
+        error_msg = f"Limit must be between 1 and 100, got: {limit}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if smart_contract_address and len(smart_contract_address) > 250:
+        error_msg = f"Smart contract address too long (max 250 chars), got: {len(smart_contract_address)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not MASUMI_PAYMENT_URL:
+        return "Error: MASUMI_PAYMENT_URL is not configured properly."
+    
+    if not m_ctx.payment_token:
+        ctx.error("Masumi Payment Token is not configured.")
+        return "Error: Masumi Payment Token is not configured."
+    
+    # Build the payment query URL (GET endpoint)
+    payment_query_url = MASUMI_PAYMENT_URL.replace("/purchase/", "/payment/")
+    
+    headers = {
+        'accept': 'application/json', 
+        'token': m_ctx.payment_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Build query parameters
+    params = {
+        "network": network,
+        "limit": limit,
+        "includeHistory": include_history
+    }
+    
+    if cursor_id:
+        params["cursorId"] = cursor_id
+    
+    if smart_contract_address:
+        params["smartContractAddress"] = smart_contract_address
+    
+    ctx.info(f"Querying payments (Network: {network}, Limit: {limit}, Include History: {include_history})")
+    
+    try:
+        response = await client.get(payment_query_url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "success":
+            entries = data.get("data", {}).get("entries", [])
+            ctx.info(f"Successfully queried {len(entries)} payment(s).")
+            
+            # Format response for better readability
+            formatted_response = {
+                "status": "success",
+                "count": len(entries),
+                "network": network,
+                "payments": entries
+            }
+            
+            if cursor_id:
+                formatted_response["cursor_id"] = cursor_id
+            
+            return json.dumps(formatted_response, indent=2)
+        else:
+            status_msg = f"Payment API did not return success status: {data.get('status')}"
+            ctx.warn(status_msg)
+            return f"Error: {status_msg}"
+    
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text[:200]
+        error_msg = f"HTTP error querying payments: {e.response.status_code} - {error_text}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error querying payments: {str(e)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+
+async def get_purchase_history(ctx: Context, network: str, limit: int = 10, cursor_id: str | None = None, 
+                              smart_contract_address: str | None = None, include_history: bool = False) -> str:
+    """
+    Retrieve purchase history from the Masumi Payment Service.
+    
+    Args:
+        network: The Cardano network ("Preprod" or "Mainnet"). For testing, only "Preprod" is allowed.
+        limit: Number of results to return (1-100, default 10).
+        cursor_id: Optional pagination cursor for retrieving next page of results.
+        smart_contract_address: Optional smart contract address filter (max 250 chars).
+        include_history: Whether to include full transaction history (default False).
+        
+    Returns:
+        JSON string containing purchase request data with transaction details.
+    """
+    m_ctx = ctx.request_context.lifespan_context
+    client = m_ctx.http_client
+    
+    # Testnet safety validation
+    try:
+        validate_testnet_safety(network)
+    except ValueError as e:
+        ctx.error(f"Testnet safety check failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    # Parameter validation
+    if not (1 <= limit <= 100):
+        error_msg = f"Limit must be between 1 and 100, got: {limit}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if smart_contract_address and len(smart_contract_address) > 250:
+        error_msg = f"Smart contract address too long (max 250 chars), got: {len(smart_contract_address)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not MASUMI_PAYMENT_URL:
+        return "Error: MASUMI_PAYMENT_URL is not configured properly."
+    
+    if not m_ctx.payment_token:
+        ctx.error("Masumi Payment Token is not configured.")
+        return "Error: Masumi Payment Token is not configured."
+    
+    # Use the purchase endpoint (GET /api/v1/purchase)
+    purchase_query_url = MASUMI_PAYMENT_URL
+    
+    headers = {
+        'accept': 'application/json', 
+        'token': m_ctx.payment_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Build query parameters matching the API schema
+    params = {
+        "network": network,
+        "limit": limit,
+        "includeHistory": include_history
+    }
+    
+    if cursor_id:
+        params["cursorId"] = cursor_id
+    
+    if smart_contract_address:
+        params["smartContractAddress"] = smart_contract_address
+    
+    ctx.info(f"Querying purchase history (Network: {network}, Limit: {limit}, Include History: {include_history})")
+    
+    try:
+        response = await client.get(purchase_query_url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "success":
+            entries = data.get("data", {}).get("entries", [])
+            ctx.info(f"Successfully queried {len(entries)} purchase(s).")
+            
+            # Format response for better readability
+            formatted_response = {
+                "status": "success",
+                "count": len(entries),
+                "network": network,
+                "purchases": entries
+            }
+            
+            if cursor_id:
+                formatted_response["cursor_id"] = cursor_id
+            
+            # Add summary information for each purchase
+            if entries:
+                summary = []
+                for purchase in entries:
+                    purchase_summary = {
+                        "id": purchase.get("id", "N/A"),
+                        "agent_identifier": purchase.get("agentIdentifier", "N/A"),
+                        "amount": purchase.get("amount", "N/A"),
+                        "status": purchase.get("status", "N/A"),
+                        "created_at": purchase.get("createdAt", "N/A")
+                    }
+                    summary.append(purchase_summary)
+                formatted_response["purchase_summary"] = summary
+            
+            return json.dumps(formatted_response, indent=2)
+        else:
+            status_msg = f"Purchase API did not return success status: {data.get('status')}"
+            ctx.warn(status_msg)
+            return f"Error: {status_msg}"
+    
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text[:200]
+        error_msg = f"HTTP error querying purchase history: {e.response.status_code} - {error_text}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error querying purchase history: {str(e)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+
+async def query_registry(ctx: Context, network: str, cursor_id: str | None = None, 
+                        smart_contract_address: str | None = None) -> str:
+    """
+    Query registry requests from the Masumi Registry Service.
+    
+    Args:
+        network: The Cardano network ("Preprod" or "Mainnet"). For testing, only "Preprod" is allowed.
+        cursor_id: Optional pagination cursor for retrieving next page of results.
+        smart_contract_address: Optional smart contract address filter.
+        
+    Returns:
+        JSON string containing registry request data with agent details, pricing, and metadata.
+    """
+    m_ctx = ctx.request_context.lifespan_context
+    client = m_ctx.http_client
+    
+    # Testnet safety validation
+    try:
+        validate_testnet_safety(network)
+    except ValueError as e:
+        ctx.error(f"Testnet safety check failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    if not MASUMI_REGISTRY_URL:
+        return "Error: MASUMI_REGISTRY_URL is not configured properly."
+    
+    if not m_ctx.registry_token:
+        ctx.error("Masumi Registry Token is not configured.")
+        return "Error: Masumi Registry Token is not configured."
+    
+    headers = {
+        'accept': 'application/json', 
+        'token': m_ctx.registry_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Build query parameters matching the API schema
+    params = {
+        "network": network
+    }
+    
+    if cursor_id:
+        params["cursorId"] = cursor_id
+    
+    if smart_contract_address:
+        params["smartContractAddress"] = smart_contract_address
+    
+    ctx.info(f"Querying registry (Network: {network})")
+    
+    try:
+        response = await client.get(MASUMI_REGISTRY_URL, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "success":
+            entries = data.get("data", {}).get("entries", [])
+            ctx.info(f"Successfully queried {len(entries)} registry entr(ies).")
+            
+            # Format response for better readability
+            formatted_response = {
+                "status": "success",
+                "count": len(entries),
+                "network": network,
+                "registry_entries": entries
+            }
+            
+            if cursor_id:
+                formatted_response["cursor_id"] = cursor_id
+            
+            # Add summary information for each agent
+            if entries:
+                summary = []
+                for entry in entries:
+                    agent_summary = {
+                        "agent_identifier": entry.get("agentIdentifier", "N/A"),
+                        "name": entry.get("name", "N/A"),
+                        "api_base_url": entry.get("apiBaseUrl", "N/A"),
+                        "capability": entry.get("Capability", {}).get("name", "N/A"),
+                        "base_price": entry.get("AgentPricing", {}).get("basePrice", "N/A"),
+                        "status": entry.get("status", "N/A")
+                    }
+                    summary.append(agent_summary)
+                formatted_response["agent_summary"] = summary
+            
+            return json.dumps(formatted_response, indent=2)
+        else:
+            status_msg = f"Registry API did not return success status: {data.get('status')}"
+            ctx.warn(status_msg)
+            return f"Error: {status_msg}"
+    
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text[:200]
+        error_msg = f"HTTP error querying registry: {e.response.status_code} - {error_text}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error querying registry: {str(e)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"

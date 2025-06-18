@@ -4,7 +4,7 @@ import uuid
 import httpx
 import random  # <<< Import random module
 import sys
-from typing import Any
+from typing import Any, Literal
 from dotenv import load_dotenv
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
@@ -16,7 +16,7 @@ from mcp.server.fastmcp import FastMCP, Context
 import tools
 from tools import list_agents, get_agent_input_schema, hire_agent, check_job_status, get_job_full_result, query_payments, get_purchase_history, query_registry
 from prompts import (
-    prompt_list_agents, prompt_get_agent_input_schema, prompt_hire_agent, 
+    prompt_list_agents, prompt_get_agent_input_schema, prompt_hire_agent,
     prompt_check_job_status, prompt_get_job_full_result, prompt_query_payments, prompt_get_purchase_history, prompt_query_registry
 )
 
@@ -31,7 +31,7 @@ MASUMI_PAYMENT_BASE_URL = os.getenv('MASUMI_PAYMENT_BASE_URL')
 if not MASUMI_REGISTRY_BASE_URL:
     print("ERROR: MASUMI_REGISTRY_BASE_URL not defined in .env file")
     sys.exit(1)
-    
+
 if not MASUMI_PAYMENT_BASE_URL:
     print("ERROR: MASUMI_PAYMENT_BASE_URL not defined in .env file")
     sys.exit(1)
@@ -115,4 +115,5 @@ mcp.prompt()(prompt_query_registry)
 # --- Main Execution ---
 if __name__ == "__main__":
     print("Starting Masumi MCP Server...")
-    mcp.run()
+    transport: Literal["stdio", "sse", "streamable-http"] = sys.argv.get(1, None)
+    mcp.run(transport=transport or "streamable-http")

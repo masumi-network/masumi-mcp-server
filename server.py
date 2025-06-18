@@ -116,4 +116,4 @@ mcp.prompt()(prompt_query_registry)
 if __name__ == "__main__":
     print("Starting Masumi MCP Server...")
     transport: Literal["stdio", "sse", "streamable-http"] = sys.argv.get(1, None)
-    mcp.run(transport=transport or "streamable-http")
+    mcp.run(transport=transport or "stdio")

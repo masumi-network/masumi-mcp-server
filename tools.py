@@ -7,6 +7,7 @@ import sys
 from typing import Any, List, Tuple
 
 from mcp.server.fastmcp import Context
+from tests.test_data import validate_testnet_safety, validate_test_data_only
 
 # Import URLs from the main module
 MASUMI_REGISTRY_URL = None

@@ -194,6 +194,56 @@ def ensure_testnet_environment() -> None:
     if not testing_mode and network == "Mainnet":
         raise ValueError("Mainnet operations require MASUMI_TESTING_MODE to be disabled")
 
+# Additional test data for agent registration
+AGENT_REGISTRATION_DATA = {
+    "new_test_agent": {
+        "name": "masumi-test-new-agent-001",
+        "api_base_url": "https://test-new-agent.masumi-test.network/",
+        "selling_wallet_vkey": "vkey_test_new_agent_123456789abcdef123456789abcdef123456789ab",
+        "capability_name": "Test New Capability",
+        "capability_version": "1.0.0",
+        "base_price": 500000,  # 0.5 ADA in lovelace
+        "tags": ["testing", "new", "capability"],
+        "description": "A test agent for new capability testing",
+        "author": "Masumi Test Team",
+        "legal_info": "Test agent - for testing purposes only"
+    },
+    "update_test_agent": {
+        "name": "masumi-test-update-agent-002",
+        "api_base_url": "https://test-update-agent.masumi-test.network/",
+        "selling_wallet_vkey": "vkey_test_update_agent_abcdef123456789abcdef123456789abcdef12345",
+        "capability_name": "Test Update Capability",
+        "capability_version": "2.0.0",
+        "base_price": 1500000,  # 1.5 ADA in lovelace
+        "tags": ["testing", "update", "capability"],
+        "description": "A test agent for update capability testing",
+        "author": "Masumi Test Team",
+        "legal_info": "Test agent - for testing purposes only"
+    }
+}
+
+# Test wallet verification keys for agent management
+AGENT_WALLET_KEYS = {
+    "test_provider_1": "vkey_test_provider_1_123456789abcdef123456789abcdef123456789abcdef",
+    "test_provider_2": "vkey_test_provider_2_abcdef123456789abcdef123456789abcdef123456789",
+    "test_provider_3": "vkey_test_provider_3_fedcba987654321fedcba987654321fedcba987654321"
+}
+
+def get_test_agent_registration_data(agent_type: str = "new") -> Dict[str, Any]:
+    """Get test agent registration data by type"""
+    if agent_type == "new":
+        return AGENT_REGISTRATION_DATA["new_test_agent"]
+    elif agent_type == "update":
+        return AGENT_REGISTRATION_DATA["update_test_agent"]
+    else:
+        raise ValueError(f"Unknown agent registration type: {agent_type}")
+
+def get_test_wallet_key(provider: str = "test_provider_1") -> str:
+    """Get test wallet verification key for agent provider"""
+    if provider not in AGENT_WALLET_KEYS:
+        raise ValueError(f"Unknown provider: {provider}")
+    return AGENT_WALLET_KEYS[provider]
+
 # Export all test data for easy access
 __all__ = [
     "TESTNET_CONFIG",
@@ -202,12 +252,16 @@ __all__ = [
     "PAYMENT_TEST_DATA",
     "PURCHASE_REFUND_DATA", 
     "AGENT_DEREGISTRATION_DATA",
+    "AGENT_REGISTRATION_DATA",
+    "AGENT_WALLET_KEYS",
     "TEST_CONTRACTS",
     "DEFAULT_TEST_PARAMS",
     "validate_testnet_safety",
     "validate_test_data_only",
     "get_test_agent",
     "get_test_wallet", 
+    "get_test_agent_registration_data",
+    "get_test_wallet_key",
     "get_future_timestamp",
     "generate_test_identifier",
     "ensure_testnet_environment"

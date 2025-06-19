@@ -805,3 +805,357 @@ async def query_registry(ctx: Context, network: str, cursor_id: str | None = Non
         error_msg = f"Unexpected error querying registry: {str(e)}"
         ctx.error(error_msg)
         return f"Error: {error_msg}"
+
+async def register_agent(ctx: Context, network: str, name: str, api_base_url: str, selling_wallet_vkey: str,
+                        capability_name: str, capability_version: str, base_price: int, 
+                        tags: list[str] | None = None, description: str | None = None, 
+                        author: str | None = None, legal_info: str | None = None) -> str:
+    """
+    Register a new agent in the Masumi Registry Service.
+    
+    Args:
+        network: The Cardano network ("Preprod" or "Mainnet"). For testing, only "Preprod" is allowed.
+        name: The agent name (required).
+        api_base_url: The base URL for the agent's API (required).
+        selling_wallet_vkey: The verification key of the selling wallet (required).
+        capability_name: The name of the agent's capability (required).
+        capability_version: The version of the agent's capability (required).
+        base_price: The base price in lovelace (required).
+        tags: Optional list of tags for categorization.
+        description: Optional description of the agent.
+        author: Optional author information.
+        legal_info: Optional legal information.
+        
+    Returns:
+        JSON string containing registration confirmation or error details.
+    """
+    m_ctx = ctx.request_context.lifespan_context
+    client = m_ctx.http_client
+    
+    # Testnet safety validation
+    try:
+        validate_testnet_safety(network)
+    except ValueError as e:
+        ctx.error(f"Testnet safety check failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    # Agent identifier validation (ensure it's a test agent)
+    if not name.startswith("masumi-test-"):
+        try:
+            validate_test_data_only(name)
+        except ValueError as e:
+            ctx.error(f"Agent name validation failed: {str(e)}")
+            return f"Error: {str(e)} Agent name must start with 'masumi-test-' for testing."
+    
+    # Parameter validation
+    if not name or len(name.strip()) == 0:
+        error_msg = "Agent name cannot be empty"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not api_base_url or not api_base_url.startswith(("http://", "https://")):
+        error_msg = "Invalid API base URL - must start with http:// or https://"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not selling_wallet_vkey or len(selling_wallet_vkey.strip()) == 0:
+        error_msg = "Selling wallet verification key cannot be empty"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if base_price < 0:
+        error_msg = f"Base price must be non-negative, got: {base_price}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not MASUMI_REGISTRY_URL:
+        return "Error: MASUMI_REGISTRY_URL is not configured properly."
+    
+    if not m_ctx.registry_token:
+        ctx.error("Masumi Registry Token is not configured.")
+        return "Error: Masumi Registry Token is not configured."
+    
+    headers = {
+        'accept': 'application/json', 
+        'token': m_ctx.registry_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Build registration payload matching the API schema
+    registration_payload = {
+        "network": network,
+        "name": name.strip(),
+        "apiBaseUrl": api_base_url.strip(),
+        "sellingWalletVkey": selling_wallet_vkey.strip(),
+        "Tags": tags if tags else [],
+        "Capability": {
+            "name": capability_name.strip(),
+            "version": capability_version.strip()
+        },
+        "AgentPricing": {
+            "basePrice": base_price,
+            "currency": "ADA"
+        }
+    }
+    
+    # Add optional fields if provided
+    if description:
+        registration_payload["description"] = description.strip()
+    
+    if author:
+        registration_payload["author"] = author.strip()
+    
+    if legal_info:
+        registration_payload["legalInfo"] = legal_info.strip()
+    
+    ctx.info(f"Registering agent '{name}' on network {network}")
+    
+    try:
+        response = await client.post(MASUMI_REGISTRY_URL, headers=headers, json=registration_payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "success":
+            registration_data = data.get("data", {})
+            ctx.info(f"Successfully registered agent '{name}'.")
+            
+            # Format response for better readability
+            formatted_response = {
+                "status": "success",
+                "message": f"Agent '{name}' registered successfully",
+                "network": network,
+                "agent_details": {
+                    "name": name,
+                    "api_base_url": api_base_url,
+                    "capability": f"{capability_name} v{capability_version}",
+                    "base_price": f"{base_price} lovelace",
+                    "tags": tags if tags else []
+                },
+                "registration_data": registration_data
+            }
+            
+            return json.dumps(formatted_response, indent=2)
+        else:
+            status_msg = f"Registry API did not return success status: {data.get('status')}"
+            ctx.warn(status_msg)
+            return f"Error: {status_msg}"
+    
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text[:500]
+        error_msg = f"HTTP error registering agent: {e.response.status_code} - {error_text}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error registering agent: {str(e)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+
+async def unregister_agent(ctx: Context, agent_identifier: str, network: str, 
+                          smart_contract_address: str | None = None) -> str:
+    """
+    Unregister an agent from the Masumi Registry Service.
+    
+    Args:
+        agent_identifier: The unique identifier of the agent to unregister.
+        network: The Cardano network ("Preprod" or "Mainnet"). For testing, only "Preprod" is allowed.
+        smart_contract_address: Optional smart contract address.
+        
+    Returns:
+        JSON string containing unregistration confirmation or error details.
+    """
+    m_ctx = ctx.request_context.lifespan_context
+    client = m_ctx.http_client
+    
+    # Testnet safety validation
+    try:
+        validate_testnet_safety(network)
+    except ValueError as e:
+        ctx.error(f"Testnet safety check failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    # Agent identifier validation (ensure it's a test agent)
+    try:
+        validate_test_data_only(agent_identifier)
+    except ValueError as e:
+        ctx.error(f"Agent identifier validation failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    # Parameter validation
+    if not agent_identifier or len(agent_identifier.strip()) == 0:
+        error_msg = "Agent identifier cannot be empty"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not MASUMI_REGISTRY_URL:
+        return "Error: MASUMI_REGISTRY_URL is not configured properly."
+    
+    if not m_ctx.registry_token:
+        ctx.error("Masumi Registry Token is not configured.")
+        return "Error: Masumi Registry Token is not configured."
+    
+    headers = {
+        'accept': 'application/json', 
+        'token': m_ctx.registry_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Build unregistration payload matching the API schema
+    unregistration_payload = {
+        "agentIdentifier": agent_identifier.strip(),
+        "network": network
+    }
+    
+    if smart_contract_address:
+        unregistration_payload["smartContractAddress"] = smart_contract_address.strip()
+    
+    ctx.info(f"Unregistering agent '{agent_identifier}' from network {network}")
+    
+    try:
+        response = await client.delete(MASUMI_REGISTRY_URL, headers=headers, json=unregistration_payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "success":
+            unregistration_data = data.get("data", {})
+            ctx.info(f"Successfully unregistered agent '{agent_identifier}'.")
+            
+            # Format response for better readability
+            formatted_response = {
+                "status": "success",
+                "message": f"Agent '{agent_identifier}' unregistered successfully",
+                "network": network,
+                "agent_identifier": agent_identifier,
+                "unregistration_data": unregistration_data
+            }
+            
+            return json.dumps(formatted_response, indent=2)
+        else:
+            status_msg = f"Registry API did not return success status: {data.get('status')}"
+            ctx.warn(status_msg)
+            return f"Error: {status_msg}"
+    
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text[:500]
+        if e.response.status_code == 404:
+            error_msg = f"Agent '{agent_identifier}' not found in registry"
+            ctx.warn(error_msg)
+            return f"Error: {error_msg}"
+        else:
+            error_msg = f"HTTP error unregistering agent: {e.response.status_code} - {error_text}"
+            ctx.error(error_msg)
+            return f"Error: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error unregistering agent: {str(e)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+
+async def get_agents_by_wallet(ctx: Context, network: str, wallet_vkey: str) -> str:
+    """
+    Query agents by wallet verification key from the Masumi Registry Service.
+    
+    Args:
+        network: The Cardano network ("Preprod" or "Mainnet"). For testing, only "Preprod" is allowed.
+        wallet_vkey: The wallet verification key to search for.
+        
+    Returns:
+        JSON string containing agents associated with the wallet.
+    """
+    m_ctx = ctx.request_context.lifespan_context
+    client = m_ctx.http_client
+    
+    # Testnet safety validation
+    try:
+        validate_testnet_safety(network)
+    except ValueError as e:
+        ctx.error(f"Testnet safety check failed: {str(e)}")
+        return f"Error: {str(e)}"
+    
+    # Parameter validation
+    if not wallet_vkey or len(wallet_vkey.strip()) == 0:
+        error_msg = "Wallet verification key cannot be empty"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"
+    
+    if not MASUMI_REGISTRY_URL:
+        return "Error: MASUMI_REGISTRY_URL is not configured properly."
+    
+    if not m_ctx.registry_token:
+        ctx.error("Masumi Registry Token is not configured.")
+        return "Error: Masumi Registry Token is not configured."
+    
+    # Build wallet query URL (assuming /wallet endpoint exists)
+    wallet_query_url = MASUMI_REGISTRY_URL.replace("/registry-entry/", "/registry/wallet/")
+    
+    headers = {
+        'accept': 'application/json', 
+        'token': m_ctx.registry_token,
+        'Content-Type': 'application/json'
+    }
+    
+    # Build query parameters
+    params = {
+        "network": network,
+        "walletVkey": wallet_vkey.strip()
+    }
+    
+    ctx.info(f"Querying agents by wallet (Network: {network}, Wallet: {wallet_vkey[:20]}...)")
+    
+    try:
+        response = await client.get(wallet_query_url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") == "success":
+            agents = data.get("data", {}).get("agents", [])
+            ctx.info(f"Successfully found {len(agents)} agent(s) for wallet.")
+            
+            # Format response for better readability
+            formatted_response = {
+                "status": "success",
+                "count": len(agents),
+                "network": network,
+                "wallet_vkey": wallet_vkey,
+                "agents": agents
+            }
+            
+            # Add summary information for each agent
+            if agents:
+                summary = []
+                for agent in agents:
+                    agent_summary = {
+                        "agent_identifier": agent.get("agentIdentifier", "N/A"),
+                        "name": agent.get("name", "N/A"),
+                        "api_base_url": agent.get("apiBaseUrl", "N/A"),
+                        "capability": agent.get("Capability", {}).get("name", "N/A"),
+                        "status": agent.get("status", "N/A")
+                    }
+                    summary.append(agent_summary)
+                formatted_response["agent_summary"] = summary
+            
+            return json.dumps(formatted_response, indent=2)
+        else:
+            status_msg = f"Registry API did not return success status: {data.get('status')}"
+            ctx.warn(status_msg)
+            return f"Error: {status_msg}"
+    
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text[:200]
+        if e.response.status_code == 404:
+            # No agents found for this wallet - this is valid
+            formatted_response = {
+                "status": "success",
+                "count": 0,
+                "network": network,
+                "wallet_vkey": wallet_vkey,
+                "agents": [],
+                "message": "No agents found for this wallet"
+            }
+            return json.dumps(formatted_response, indent=2)
+        else:
+            error_msg = f"HTTP error querying agents by wallet: {e.response.status_code} - {error_text}"
+            ctx.error(error_msg)
+            return f"Error: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error querying agents by wallet: {str(e)}"
+        ctx.error(error_msg)
+        return f"Error: {error_msg}"

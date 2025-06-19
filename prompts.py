@@ -149,3 +149,58 @@ def prompt_query_registry() -> str:
         "- Agent summary for quick overview\n\n"
         "⚠️ TESTNET SAFETY: Only 'Preprod' network is allowed during testing to prevent mainnet operations."
     )
+
+def prompt_register_agent() -> str:
+    """Provides guidance on how to register a new agent in the Masumi Registry."""
+    return (
+        "To register a new agent, use the `register_agent` tool. This allows you to onboard "
+        "your agent to the Masumi network for others to discover and use.\n\n"
+        "Required parameters:\n"
+        "- `network`: Must be 'Preprod' for testing (Mainnet blocked in testing mode)\n"
+        "- `name`: Agent name (must start with 'masumi-test-' for testing)\n"
+        "- `api_base_url`: Your agent's API endpoint (http:// or https://)\n"
+        "- `selling_wallet_vkey`: Your wallet verification key for payments\n"
+        "- `capability_name`: What your agent does (e.g., 'Content Writing')\n"
+        "- `capability_version`: Version of your capability (e.g., '1.0.0')\n"
+        "- `base_price`: Price in lovelace (e.g., 1000000 for 1 ADA)\n\n"
+        "Optional parameters:\n"
+        "- `tags`: List of tags for categorization\n"
+        "- `description`: Detailed description of your agent\n"
+        "- `author`: Author information\n"
+        "- `legal_info`: Legal information\n\n"
+        "Example: `register_agent(network='Preprod', name='masumi-test-writer-001', "
+        "api_base_url='https://my-agent.com/', selling_wallet_vkey='vkey123...', "
+        "capability_name='Content Writing', capability_version='1.0.0', base_price=1000000)`\n\n"
+        "⚠️ TESTNET SAFETY: Only test agents with 'masumi-test-' prefix allowed during testing."
+    )
+
+def prompt_unregister_agent() -> str:
+    """Provides guidance on how to unregister an agent from the Masumi Registry."""
+    return (
+        "To unregister an agent, use the `unregister_agent` tool. This removes your agent "
+        "from the Masumi network registry.\n\n"
+        "Required parameters:\n"
+        "- `agent_identifier`: The unique identifier of your agent (must start with 'masumi-test-')\n"
+        "- `network`: Must be 'Preprod' for testing (Mainnet blocked in testing mode)\n\n"
+        "Optional parameters:\n"
+        "- `smart_contract_address`: Smart contract address if applicable\n\n"
+        "Example: `unregister_agent(agent_identifier='masumi-test-writer-001', network='Preprod')`\n\n"
+        "⚠️ TESTNET SAFETY: Only test agents with 'masumi-test-' prefix can be unregistered during testing."
+    )
+
+def prompt_get_agents_by_wallet() -> str:
+    """Provides guidance on how to query agents by wallet verification key."""
+    return (
+        "To find agents associated with a specific wallet, use the `get_agents_by_wallet` tool. "
+        "This helps you see all agents registered under a particular wallet.\n\n"
+        "Required parameters:\n"
+        "- `network`: Must be 'Preprod' for testing (Mainnet blocked in testing mode)\n"
+        "- `wallet_vkey`: The wallet verification key to search for\n\n"
+        "Example: `get_agents_by_wallet(network='Preprod', wallet_vkey='vkey_test_writer_123...')`\n\n"
+        "The response includes:\n"
+        "- Complete list of agents for the wallet\n"
+        "- Agent details and capabilities\n"
+        "- Registration status and metadata\n"
+        "- Agent summary for quick overview\n\n"
+        "⚠️ TESTNET SAFETY: Only 'Preprod' network is allowed during testing to prevent mainnet operations."
+    )

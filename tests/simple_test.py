@@ -40,9 +40,9 @@ async def test_server_with_mcp_cli():
         # Test 3: Check if new tools are registered
         print("📋 Testing tool registration...")
         try:
-            from tools import query_payments, get_purchase_history, query_registry
-            from prompts import prompt_query_payments, prompt_get_purchase_history, prompt_query_registry
-            print("✅ New tools (query_payments, get_purchase_history, query_registry) and prompts imported successfully")
+            from tools import query_payments, get_purchase_history, query_registry, register_agent, unregister_agent, get_agents_by_wallet
+            from prompts import prompt_query_payments, prompt_get_purchase_history, prompt_query_registry, prompt_register_agent, prompt_unregister_agent, prompt_get_agents_by_wallet
+            print("✅ New tools (payment, purchase, registry, agent management) and prompts imported successfully")
         except Exception as e:
             print(f"❌ New tool import failed: {e}")
             return False
@@ -88,6 +88,25 @@ async def test_server_with_mcp_cli():
                 print("✅ query_registry testnet safety validation working correctly")
             else:
                 print(f"⚠️  query_registry testnet safety check may not be working: {result}")
+            
+            # Test agent management tools
+            result = await register_agent(mock_ctx, "Mainnet", "test-agent", "https://test.com", "vkey123", "Test", "1.0.0", 1000000)
+            if "Error:" in result and ("Mainnet" in result or "masumi-test-" in result):
+                print("✅ register_agent testnet safety validation working correctly")
+            else:
+                print(f"⚠️  register_agent testnet safety check may not be working: {result}")
+            
+            result = await unregister_agent(mock_ctx, "test-agent", "Mainnet")
+            if "Error:" in result and ("Mainnet" in result or "masumi-test-" in result):
+                print("✅ unregister_agent testnet safety validation working correctly")
+            else:
+                print(f"⚠️  unregister_agent testnet safety check may not be working: {result}")
+            
+            result = await get_agents_by_wallet(mock_ctx, "Mainnet", "test_wallet")
+            if "Error:" in result and ("Mainnet" in result or "Preprod" in result):
+                print("✅ get_agents_by_wallet testnet safety validation working correctly")
+            else:
+                print(f"⚠️  get_agents_by_wallet testnet safety check may not be working: {result}")
             
             # Test with valid testnet parameters
             result = await query_payments(mock_ctx, "Preprod", 5)

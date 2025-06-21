@@ -1,10 +1,7 @@
-import os
 import json
-import uuid
 import httpx
 import random
-import sys
-from typing import Any, List, Tuple
+from typing import Any
 
 from mcp.server.fastmcp import Context
 from tests.test_data import validate_testnet_safety, validate_test_data_only
@@ -20,7 +17,79 @@ def set_urls(registry_url: str, payment_url: str):
 
 # --- Helper functions ---
 
-def split_large_content(content: str, max_size: int = 4000) -> List[str]:
+def handle_http_error(ctx: Context, e: httpx.HTTPStatusError, operation: str) -> str:
+    """
+    Standardized HTTP error handling for API calls.
+    
+    Args:
+        ctx: MCP context for logging
+        e: HTTP status error exception
+        operation: Description of the operation being performed
+        
+    Returns:
+        Formatted error message string
+    """
+    error_text = e.response.text[:200]
+    error_msg = f"HTTP error during {operation}: {e.response.status_code} - {error_text}"
+    ctx.error(error_msg)
+    return f"Error: {error_msg}"
+
+def handle_json_decode_error(ctx: Context, e: Exception, operation: str) -> str:
+    """
+    Standardized JSON decode error handling.
+    
+    Args:
+        ctx: MCP context for logging
+        e: JSON decode error exception
+        operation: Description of the operation being performed
+        
+    Returns:
+        Formatted error message string
+    """
+    error_msg = f"Invalid JSON response during {operation}: {str(e)}"
+    ctx.error(error_msg)
+    return f"Error: {error_msg}"
+
+def validate_url_config(url: str | None, url_name: str) -> str | None:
+    """
+    Validate URL configuration.
+    
+    Args:
+        url: URL to validate
+        url_name: Name of the URL for error messages
+        
+    Returns:
+        Error message if invalid, None if valid
+    """
+    if not url:
+        return f"Error: {url_name} is not configured properly."
+    return None
+
+def normalize_api_url(api_base_url: str) -> str:
+    """
+    Normalize API base URL by ensuring it ends with a slash.
+    
+    Args:
+        api_base_url: Base URL to normalize
+        
+    Returns:
+        Normalized URL ending with slash
+    """
+    if not api_base_url.endswith('/'):
+        return api_base_url + '/'
+    return api_base_url
+
+def generate_purchaser_identifier() -> str:
+    """
+    Generate a unique purchaser identifier for agent hiring.
+    
+    Returns:
+        Formatted purchaser identifier string
+    """
+    random_suffix = "".join([str(random.randint(0, 9)) for _ in range(3)])
+    return f"example_purchaser_{random_suffix}"
+
+def split_large_content(content: str, max_size: int = 4000) -> list[str]:
     """
     Split large content into smaller chunks to avoid truncation.
 
@@ -159,6 +228,157 @@ async def get_agent_input_schema(ctx: Context, agent_identifier: str, api_base_u
         ctx.error(error_msg)
         return f"Error: {error_msg}"
 
+# --- Agent Hiring Helper Functions ---
+
+async def _start_agent_job(ctx: Context, client: httpx.AsyncClient, agent_identifier: str, 
+                          api_base_url: str, input_data: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
+    """
+    Start a job on the agent and extract payment information.
+    
+    Args:
+        ctx: MCP context for logging
+        client: HTTP client
+        agent_identifier: Agent identifier
+        api_base_url: Normalized agent API URL
+        input_data: Job input data
+        
+    Returns:
+        Tuple of (error_message, job_data) - error_message is None on success
+    """
+    start_job_url = f"{api_base_url}start_job"
+    identifier_from_purchaser = generate_purchaser_identifier()
+    
+    ctx.info(f"Generated identifier_from_purchaser: {identifier_from_purchaser}")
+    
+    start_job_payload = {
+        "identifier_from_purchaser": identifier_from_purchaser,
+        "input_data": input_data
+    }
+    start_job_headers = {'accept': 'application/json', 'Content-Type': 'application/json'}
+    
+    try:
+        payload_str = json.dumps(start_job_payload)
+        ctx.info(f"Payload to be sent to /start_job: {payload_str}")
+    except Exception as e:
+        ctx.error(f"Could not serialize start_job_payload: {e}")
+        return f"Internal error: Could not serialize payload for agent {agent_identifier}.", None
+    
+    try:
+        ctx.info(f"Calling start_job for {agent_identifier} at {start_job_url}")
+        response = await client.post(start_job_url, headers=start_job_headers, json=start_job_payload)
+        ctx.info(f"/start_job response status code: {response.status_code}")
+        
+        if response.status_code == 400:
+            try:
+                error_detail = response.json()
+                ctx.error(f"Agent returned 400 Bad Request for /start_job. Detail: {json.dumps(error_detail)}")
+            except json.JSONDecodeError:
+                ctx.error(f"Agent returned 400 Bad Request for /start_job. Response body not valid JSON: {response.text[:500]}")
+        
+        response.raise_for_status()
+        job_data = response.json()
+        ctx.info(f"/start_job successful response data: {json.dumps(job_data)}")
+        
+        # Validate required fields
+        required_fields = ["job_id", "blockchainIdentifier", "sellerVKey", "submitResultTime", 
+                          "unlockTime", "externalDisputeUnlockTime", "input_hash", "agentIdentifier"]
+        
+        missing_fields = [field for field in required_fields if job_data.get(field) is None]
+        if missing_fields:
+            error_msg = f"Error: Missing required data from agent's /start_job response: {', '.join(missing_fields)}. Response: {json.dumps(job_data)}"
+            ctx.error(error_msg)
+            return error_msg, None
+        
+        job_id = job_data.get("job_id")
+        ctx.info(f"Job started successfully for {agent_identifier}. Job ID: {job_id}. Proceeding to payment.")
+        
+        # Add the purchaser identifier to job data for payment
+        job_data["identifier_from_purchaser"] = identifier_from_purchaser
+        return None, job_data
+        
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text
+        try:
+            detail = json.loads(error_text).get("detail", error_text)
+            if isinstance(detail, list):
+                detail_str = "; ".join([f"{item.get('loc', ['Unknown location'])[1]}: {item.get('msg', 'Unknown error')}" for item in detail])
+                return f"Error from agent {agent_identifier}: {detail_str} (Status code: {e.response.status_code})", None
+            else:
+                if "Input_data or identifier_from_purchaser is missing" in str(detail):
+                    return f"Error from agent {agent_identifier}: Input data or identifier is invalid/missing. Please ensure input matches schema and try again. (Status code: {e.response.status_code})", None
+                else:
+                    return f"Error from agent {agent_identifier}: {detail} (Status code: {e.response.status_code})", None
+        except json.JSONDecodeError:
+            return f"Error from agent {agent_identifier}: {error_text} (Status code: {e.response.status_code})", None
+    
+    except Exception as e:
+        error_msg = f"Unexpected error during /start_job call for {agent_identifier}: {str(e)}"
+        ctx.error(error_msg, exc_info=True)
+        return f"Error: {error_msg}", None
+
+async def _initiate_payment(ctx: Context, client: httpx.AsyncClient, payment_token: str, 
+                           network: str, job_data: dict[str, Any]) -> str:
+    """
+    Initiate payment for a started job.
+    
+    Args:
+        ctx: MCP context for logging
+        client: HTTP client
+        payment_token: Payment service token
+        network: Network identifier
+        job_data: Job data from start_job response
+        
+    Returns:
+        Success message or error message
+    """
+    job_id = job_data.get("job_id")
+    payment_headers = {'accept': 'application/json', 'token': payment_token, 'Content-Type': 'application/json'}
+    payment_payload = {
+        "identifierFromPurchaser": job_data.get("identifier_from_purchaser"),
+        "blockchainIdentifier": job_data.get("blockchainIdentifier"),
+        "network": network,
+        "sellerVkey": job_data.get("sellerVKey"),
+        "paymentType": "Web3CardanoV1",
+        "submitResultTime": str(job_data.get("submitResultTime")),
+        "unlockTime": str(job_data.get("unlockTime")),
+        "externalDisputeUnlockTime": str(job_data.get("externalDisputeUnlockTime")),
+        "agentIdentifier": job_data.get("agentIdentifier"),
+        "inputHash": job_data.get("input_hash")
+    }
+    
+    try:
+        ctx.info(f"Calling payment service ({MASUMI_PAYMENT_URL}) for job {job_id}")
+        payment_response = await client.post(MASUMI_PAYMENT_URL, headers=payment_headers, json=payment_payload)
+        ctx.info(f"/purchase response status code: {payment_response.status_code}")
+        
+        payment_response.raise_for_status()
+        payment_data = payment_response.json()
+        ctx.info(f"/purchase successful response data: {json.dumps(payment_data)}")
+        
+        if payment_data.get("status") == "success":
+            next_action = payment_data.get("data", {}).get("NextAction", {}).get("requestedAction", "Unknown")
+            payment_id = payment_data.get("data", {}).get("id", "N/A")
+            agent_identifier = job_data.get("agentIdentifier")
+            success_msg = f"Successfully hired agent {agent_identifier}. Job ID: {job_id}. Payment initiated (ID: {payment_id}), Next Action: {next_action}."
+            ctx.info(success_msg)
+            return success_msg
+        else:
+            error_detail = json.dumps(payment_data)
+            error_msg = f"Payment service returned status '{payment_data.get('status')}'. Details: {error_detail}"
+            ctx.error(f"Payment initiation failed for job {job_id}: {error_msg}")
+            return f"Error initiating payment for job {job_id}: {error_msg}"
+            
+    except httpx.HTTPStatusError as e:
+        error_text = e.response.text
+        error_msg = f"HTTP error calling payment service for job {job_id}: {e.response.status_code} - Response Body: {error_text}"
+        ctx.error(error_msg)
+        agent_identifier = job_data.get("agentIdentifier")
+        return f"Error: Job {job_id} was started on agent {agent_identifier}, but failed to initiate payment: {error_msg}"
+    except Exception as e:
+        error_msg = f"Unexpected error calling payment service for job {job_id}: {str(e)}"
+        ctx.error(error_msg, exc_info=True)
+        return f"Error: Job {job_id} was started, but encountered an unexpected error initiating payment: {error_msg}"
+
 async def hire_agent(ctx: Context, agent_identifier: str, api_base_url: str, input_data: dict[str, Any]) -> str:
     """
     Hires a Masumi agent using its URL: starts a job and initiates payment.
@@ -179,167 +399,41 @@ async def hire_agent(ctx: Context, agent_identifier: str, api_base_url: str, inp
     """
     # WARNING TO ASSISTANT: DO NOT CALL THIS FUNCTION WITH AUTOMATICALLY GENERATED INPUT.
     # ALWAYS ASK THE USER TO EXPLICITLY PROVIDE THE VALUES THEY WANT TO USE.
-
+    
     m_ctx = ctx.request_context.lifespan_context
     client = m_ctx.http_client
-
-    if not MASUMI_PAYMENT_URL:
-        return "Error: MASUMI_PAYMENT_URL is not configured properly."
-
-    ctx.info(f"Initiating hiring process for agent: {agent_identifier} using URL: {api_base_url}")
-    ctx.info(f"Received input_data: {input_data}")
-
-    # --- Input Validation ---
+    
+    # Configuration validation
+    url_error = validate_url_config(MASUMI_PAYMENT_URL, "MASUMI_PAYMENT_URL")
+    if url_error:
+        return url_error
+    
+    if not m_ctx.payment_token:
+        return "Error: Masumi Payment Token is not configured. Cannot hire agent."
+    
+    if not api_base_url:
+        return f"Error: api_base_url must be provided for agent {agent_identifier}."
+    
+    # Input validation
     if not isinstance(input_data, dict) or not input_data:
         error_msg = "Error: The 'input_data' parameter must be a non-empty dictionary containing the agent's required inputs."
         ctx.error(error_msg + f" Received: {input_data}")
         return error_msg + " Please provide the required inputs based on the agent's schema (use get_agent_input_schema)."
+    
+    ctx.info(f"Initiating hiring process for agent: {agent_identifier} using URL: {api_base_url}")
+    ctx.info(f"Received input_data: {input_data}")
+    
+    # Normalize URL
+    api_base_url = normalize_api_url(api_base_url)
+    
+    # Start job on agent
+    job_error, job_data = await _start_agent_job(ctx, client, agent_identifier, api_base_url, input_data)
+    if job_error:
+        return job_error
+    
+    # Initiate payment
+    return await _initiate_payment(ctx, client, m_ctx.payment_token, m_ctx.network, job_data)
 
-    if not m_ctx.payment_token:
-        return "Error: Masumi Payment Token is not configured. Cannot hire agent."
-    if not api_base_url:
-         return f"Error: api_base_url must be provided for agent {agent_identifier}."
-
-    if not api_base_url.endswith('/'):
-        api_base_url += '/'
-
-    # --- Step 2: Call Agent /start_job ---
-    start_job_url = f"{api_base_url}start_job"
-
-    # Generate identifier in requested format
-    random_suffix = "".join([str(random.randint(0, 9)) for _ in range(3)])
-    identifier_from_purchaser = f"example_purchaser_{random_suffix}"
-    ctx.info(f"Generated identifier_from_purchaser: {identifier_from_purchaser}")
-
-    start_job_payload = {
-        "identifier_from_purchaser": identifier_from_purchaser,
-        "input_data": input_data
-    }
-    start_job_headers = {'accept': 'application/json', 'Content-Type': 'application/json'}
-    job_id = None
-
-    try:
-        payload_to_send_str = json.dumps(start_job_payload)
-        ctx.info(f"Payload to be sent to /start_job: {payload_to_send_str}")
-    except Exception as dump_e:
-        ctx.error(f"Could not serialize start_job_payload: {dump_e}")
-        return f"Internal error: Could not serialize payload for agent {agent_identifier}."
-
-    blockchain_identifier = None
-    seller_vkey = None
-    submit_time = None
-    unlock_time = None
-    ext_dispute_time = None
-    input_hash = None
-    agent_id_for_payment = None
-
-    try:
-        ctx.info(f"Calling start_job for {agent_identifier} at {start_job_url}")
-        start_job_response = await client.post(start_job_url, headers=start_job_headers, json=start_job_payload)
-        ctx.info(f"/start_job response status code: {start_job_response.status_code}")
-
-        if start_job_response.status_code == 400:
-             try:
-                 error_detail = start_job_response.json()
-                 ctx.error(f"Agent returned 400 Bad Request for /start_job. Detail: {json.dumps(error_detail)}")
-             except json.JSONDecodeError:
-                 ctx.error(f"Agent returned 400 Bad Request for /start_job. Response body not valid JSON: {start_job_response.text[:500]}")
-
-        start_job_response.raise_for_status()
-
-        start_job_data = start_job_response.json()
-        ctx.info(f"/start_job successful response data: {json.dumps(start_job_data)}")
-
-        job_id = start_job_data.get("job_id")
-        blockchain_identifier = start_job_data.get("blockchainIdentifier")
-        seller_vkey = start_job_data.get("sellerVKey")
-        submit_time = start_job_data.get("submitResultTime")
-        unlock_time = start_job_data.get("unlockTime")
-        ext_dispute_time = start_job_data.get("externalDisputeUnlockTime")
-        input_hash = start_job_data.get("input_hash")
-        agent_id_for_payment = start_job_data.get("agentIdentifier")
-
-        required_payment_fields = {
-            "job_id": job_id, "blockchainIdentifier": blockchain_identifier, "sellerVkey": seller_vkey,
-            "submitResultTime": submit_time, "unlockTime": unlock_time,
-            "externalDisputeUnlockTime": ext_dispute_time, "input_hash": input_hash,
-            "agentIdentifier (for payment)": agent_id_for_payment
-        }
-        missing_fields = [k for k, v in required_payment_fields.items() if v is None]
-        if missing_fields:
-             error_msg = f"Error: Missing required data from agent's /start_job response: {', '.join(missing_fields)}. Response: {json.dumps(start_job_data)}"
-             ctx.error(error_msg)
-             return error_msg
-
-        ctx.info(f"Job started successfully for {agent_identifier}. Job ID: {job_id}. Proceeding to payment.")
-
-    except httpx.HTTPStatusError as e:
-        error_text = e.response.text
-        error_msg = f"HTTP error calling /start_job for {agent_identifier}: {e.response.status_code} - Response Body: {error_text}"
-        ctx.error(error_msg)
-        try:
-            detail = json.loads(error_text).get("detail", error_text)
-            if isinstance(detail, list):
-                 detail_str = "; ".join([f"{item.get('loc', ['Unknown location'])[1]}: {item.get('msg', 'Unknown error')}" for item in detail])
-                 return f"Error from agent {agent_identifier}: {detail_str} (Status code: {e.response.status_code})"
-            else:
-                 if "Input_data or identifier_from_purchaser is missing" in str(detail):
-                     return f"Error from agent {agent_identifier}: Input data or identifier is invalid/missing. Please ensure input matches schema and try again. (Status code: {e.response.status_code})"
-                 else:
-                     return f"Error from agent {agent_identifier}: {detail} (Status code: {e.response.status_code})"
-        except json.JSONDecodeError:
-            return f"Error from agent {agent_identifier}: {error_text} (Status code: {e.response.status_code})"
-
-    except Exception as e:
-        error_msg = f"Unexpected error during /start_job call for {agent_identifier}: {str(e)}"
-        ctx.error(error_msg, exc_info=True)
-        return f"Error: {error_msg}"
-
-    # --- Step 3: Call Payment Service /purchase ---
-    payment_headers = {'accept': 'application/json', 'token': m_ctx.payment_token, 'Content-Type': 'application/json'}
-    payment_payload = {
-          "identifierFromPurchaser": identifier_from_purchaser,
-          "blockchainIdentifier": blockchain_identifier,
-          "network": m_ctx.network,
-          "sellerVkey": seller_vkey,
-          "paymentType": "Web3CardanoV1",
-          "submitResultTime": str(submit_time),
-          "unlockTime": str(unlock_time),
-          "externalDisputeUnlockTime": str(ext_dispute_time),
-          "agentIdentifier": agent_id_for_payment,
-          "inputHash": input_hash
-    }
-
-    try:
-        ctx.info(f"Calling payment service ({MASUMI_PAYMENT_URL}) for job {job_id}")
-        payment_response = await client.post(MASUMI_PAYMENT_URL, headers=payment_headers, json=payment_payload)
-        ctx.info(f"/purchase response status code: {payment_response.status_code}")
-
-        payment_response.raise_for_status()
-        payment_data = payment_response.json()
-        ctx.info(f"/purchase successful response data: {json.dumps(payment_data)}")
-
-        if payment_data.get("status") == "success":
-            next_action = payment_data.get("data", {}).get("NextAction", {}).get("requestedAction", "Unknown")
-            payment_id = payment_data.get("data", {}).get("id", "N/A")
-            success_msg = f"Successfully hired agent {agent_identifier}. Job ID: {job_id}. Payment initiated (ID: {payment_id}), Next Action: {next_action}."
-            ctx.info(success_msg)
-            return success_msg
-        else:
-            error_detail = json.dumps(payment_data)
-            error_msg = f"Payment service returned status '{payment_data.get('status')}'. Details: {error_detail}"
-            ctx.error(f"Payment initiation failed for job {job_id}: {error_msg}")
-            return f"Error initiating payment for job {job_id}: {error_msg}"
-
-    except httpx.HTTPStatusError as e:
-        error_text = e.response.text
-        error_msg = f"HTTP error calling payment service for job {job_id}: {e.response.status_code} - Response Body: {error_text}"
-        ctx.error(error_msg)
-        return f"Error: Job {job_id} was started on agent {agent_identifier}, but failed to initiate payment: {error_msg}"
-    except Exception as e:
-        error_msg = f"Unexpected error calling payment service for job {job_id}: {str(e)}"
-        ctx.error(error_msg, exc_info=True)
-        return f"Error: Job {job_id} was started, but encountered an unexpected error initiating payment: {error_msg}"
 
 async def get_job_full_result(ctx: Context, agent_identifier: str, api_base_url: str, job_id: str) -> str:
     """

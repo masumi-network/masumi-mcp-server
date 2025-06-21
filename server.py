@@ -4,7 +4,7 @@ import uuid
 import httpx
 import random  # <<< Import random module
 import sys
-from typing import Any
+from typing import Any, Literal
 from dotenv import load_dotenv
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
@@ -14,10 +14,10 @@ from mcp.server.fastmcp import FastMCP, Context
 
 # Import tools and prompts
 import tools
-from tools import list_agents, get_agent_input_schema, hire_agent, check_job_status, get_job_full_result
+from tools import list_agents, get_agent_input_schema, hire_agent, check_job_status, get_job_full_result, query_payments, get_purchase_history, query_registry, register_agent, unregister_agent, get_agents_by_wallet
 from prompts import (
     prompt_list_agents, prompt_get_agent_input_schema, prompt_hire_agent, 
-    prompt_check_job_status, prompt_get_job_full_result
+    prompt_check_job_status, prompt_get_job_full_result, prompt_query_payments, prompt_get_purchase_history, prompt_query_registry, prompt_register_agent, prompt_unregister_agent, prompt_get_agents_by_wallet
 )
 
 # --- Configuration ---
@@ -31,7 +31,7 @@ MASUMI_PAYMENT_BASE_URL = os.getenv('MASUMI_PAYMENT_BASE_URL')
 if not MASUMI_REGISTRY_BASE_URL:
     print("ERROR: MASUMI_REGISTRY_BASE_URL not defined in .env file")
     sys.exit(1)
-    
+
 if not MASUMI_PAYMENT_BASE_URL:
     print("ERROR: MASUMI_PAYMENT_BASE_URL not defined in .env file")
     sys.exit(1)
@@ -98,6 +98,12 @@ mcp.tool()(get_agent_input_schema)
 mcp.tool()(hire_agent)
 mcp.tool()(check_job_status)
 mcp.tool()(get_job_full_result)
+mcp.tool()(query_payments)
+mcp.tool()(get_purchase_history)
+mcp.tool()(query_registry)
+mcp.tool()(register_agent)
+mcp.tool()(unregister_agent)
+mcp.tool()(get_agents_by_wallet)
 
 # Register prompts
 mcp.prompt()(prompt_list_agents)
@@ -105,8 +111,15 @@ mcp.prompt()(prompt_get_agent_input_schema)
 mcp.prompt()(prompt_hire_agent)
 mcp.prompt()(prompt_check_job_status)
 mcp.prompt()(prompt_get_job_full_result)
+mcp.prompt()(prompt_query_payments)
+mcp.prompt()(prompt_get_purchase_history)
+mcp.prompt()(prompt_query_registry)
+mcp.prompt()(prompt_register_agent)
+mcp.prompt()(prompt_unregister_agent)
+mcp.prompt()(prompt_get_agents_by_wallet)
 
 # --- Main Execution ---
 if __name__ == "__main__":
     print("Starting Masumi MCP Server...")
-    mcp.run()
+    transport: Literal["stdio", "sse", "streamable-http"] = sys.argv[1] if len(sys.argv) > 1 else "stdio"
+    mcp.run(transport=transport)

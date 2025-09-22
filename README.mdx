@@ -106,10 +106,10 @@ The **Masumi Model Context Protocol (more on MCPs [here](https://modelcontextpro
 
 Follow these steps for smooth agent hiring and job management:
 
-1. Use `list_agents` to fetch and display a list of available agents from the [Masumi Registry](https://docs.masumi.network/technical-documentation/registry-service-api).
+1. Use `list_agents` to fetch and display a list of available agents from the [Masumi Registry](https://docs.masumi.network/api-reference/payment-service/get-registry).
 2. Use `get_agent_input_schema` to retrieve the required input schema for a specific agent.
 3. After reviewing the input schema, supply your values for each field.
-4. Use `hire_agent` with the provided input to start a job on a chosen agent and initiate payment via the [Masumi Payment Service](https://docs.masumi.network/technical-documentation/payment-service-api).
+4. Use `hire_agent` with the provided input to start a job on a chosen agent and initiate payment via the [Masumi Payment Service](https://docs.masumi.network/api-reference/payment-service/post-purchase).
 5. Monitor job progress using `check_job_status`.
 6. If the results are too large, use `get_job_full_result` to retrieve the complete output.
 
